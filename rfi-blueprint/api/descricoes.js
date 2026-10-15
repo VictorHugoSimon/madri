@@ -6,8 +6,20 @@ function getAuthor(req) {
   catch (_) { return String(raw).trim().slice(0,120); }
 }
 
+async function readJsonBody(req) {
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) return req.body;
+  if (typeof req.body === 'string' && req.body.trim()) return JSON.parse(req.body);
+  if (Buffer.isBuffer(req.body) && req.body.length) return JSON.parse(req.body.toString('utf8'));
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  if (!chunks.length) return {};
+  const raw = Buffer.concat(chunks).toString('utf8').trim();
+  return raw ? JSON.parse(raw) : {};
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
   if (!process.env.DATABASE_URL) return res.status(500).json({ error: 'database_not_configured' });
   const sql = neon(process.env.DATABASE_URL);
   try {
@@ -19,11 +31,19 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-      const item = String(body.item || '').trim();
-      const texto = String(body.texto || '').trim();
-      const autor = getAuthor(req) || 'Sem nome';
-      if (!item || item.length > 64 || !texto || texto.length > 20000) return res.status(400).json({ error: 'invalid_payload' });
+      let body;
+      try { body = await readJsonBody(req); }
+      catch (_) { return res.status(400).json({ error: 'invalid_json' }); }
+
+      const item = String(body.item ?? body.item_id ?? body.id ?? '').trim();
+      const texto = String(body.texto ?? body.text_content ?? body.text ?? '').trim();
+      const autor = getAuthor(req) || String(body.autor ?? body.author ?? '').trim().slice(0,120) || 'Sem nome';
+
+      if (!item || item.length > 64 || !texto || texto.length > 20000) {
+        console.warn('descricoes_invalid_payload', { hasItem: !!item, itemLength: item.length, hasTexto: !!texto, textoLength: texto.length });
+        return res.status(400).json({ error: 'invalid_payload' });
+      }
+
       const rows = await sql`
         insert into descriptions (item_id, text_content, author, created_at, updated_at)
         values (${item}, ${texto}, ${autor}, now(), now())
@@ -34,13 +54,13 @@ module.exports = async function handler(req, res) {
         returning item_id, text_content, author, updated_at
       `;
       const r = rows[0];
-      return res.status(200).json({ t: r.text_content, a: r.author || 'Sem nome', c: r.updated_at });
+      return res.status(200).json({ ok: true, t: r.text_content, a: r.author || 'Sem nome', c: r.updated_at });
     }
 
     res.setHeader('Allow', 'GET, POST');
     return res.status(405).json({ error: 'method_not_allowed' });
   } catch (err) {
     console.error('descricoes_api_error', err);
-    return res.status(500).json({ error: 'database_error' });
+    return res.status(500).json({ error: 'database_error', detail: String(err && err.message || err).slice(0,300) });
   }
 };
