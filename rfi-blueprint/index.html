@@ -8,8 +8,14 @@
   let html=await new Response(new Blob([a]).stream().pipeThrough(ds)).text();
 
   html=html.replace("var API=/^https?:/.test(location.protocol)?'/api':null,ONLINE=false,DS={},DE={},AUTOR=localStorage.getItem('madri-autor')||'',LK='madri-conc-desc-v1';","var API=/^https?:/.test(location.protocol)?'/api':null,ONLINE=false,DS={},DE={},AUTOR=localStorage.getItem('madri-autor')||'';");
-
   html=html.replace(/function loc\(\)\{try\{DS=JSON\.parse\(localStorage\.getItem\(LK\)\)\|\|\{\}\}catch\(e\)\{DS=\{\}\}\}\s*function savL\(\)\{try\{localStorage\.setItem\(LK,JSON\.stringify\(DS\)\)\}catch\(e\)\{\}\}/,'');
+
+  html=html.replace(/var _r=render;render=function\(\)\{[\s\S]*?\};\ndocument\.getElementById\('ap-out'\)\.addEventListener/,
+`var _r=render;render=function(){_r();var out=document.getElementById('ap-out');var table=out.querySelector('table.ap-t');if(!table)return;
+ var head=table.querySelector('thead tr');if(head&&!head.querySelector('[data-demand-head]')){var th=document.createElement('th');th.setAttribute('data-demand-head','1');th.textContent='Descrição da demanda';th.style.minWidth='250px';head.appendChild(th)}
+ out.querySelectorAll('tbody>tr').forEach(function(tr){var id=tr.querySelector('.ap-id');if(!id)return;var k=id.textContent.trim();var td=document.createElement('td');td.setAttribute('data-h','Descrição da demanda');td.style.cssText='vertical-align:top;min-width:250px;width:280px';
+  var d=DS&&DS[k]?DS[k]:null;td.innerHTML='<textarea class="ds-ta" data-ta="'+esc(k)+'" placeholder="Digite a descrição da demanda" style="min-height:70px;width:100%;box-sizing:border-box">'+esc(d?d.t:'')+'</textarea><div style="display:flex;align-items:center;gap:8px;margin-top:6px"><button type="button" class="ds-b pr" data-sv="'+esc(k)+'">Salvar</button><span style="font-size:10px;color:'+(d?'#166534':'#6b7280')+'">'+(d?'Salvo no banco':'')+'</span></div>';tr.appendChild(td)})};
+document.getElementById('ap-out').addEventListener`);
 
   html=html.replace(/ if\(D\.sv\)\{[\s\S]*?return\}\n if\(D\.dl\)/,
 ` if(D.sv){var k=D.sv,t=document.querySelector('[data-ta="'+CSS.escape(k)+'"]').value.trim();if(!t){alert('Escreva a descrição antes de salvar.');return}
@@ -19,7 +25,7 @@
   api('POST','/descricoes',{item:k,texto:t,autor:AUTOR}).then(function(){
     return api('GET','/descricoes').then(function(all){
       if(!all||!all[k]||!all[k].t)throw new Error('Registro não confirmado após gravação');
-      DS=all;ONLINE=true;delete DE[k];render();focusSaved(k);st('ok','Salvo no banco · '+hh());
+      DS=all;ONLINE=true;delete DE[k];render();st('ok','Salvo no banco · '+hh());
     });
   }).catch(function(e){console.error('Falha ao salvar descrição',e);btn.disabled=false;btn.textContent=oldTxt;st('','Falha ao salvar no banco · '+(e&&e.message?e.message:'tente de novo'));alert('A descrição NÃO foi salva no banco: '+(e&&e.message?e.message:'erro desconhecido'))});return}
  if(D.dl)`);
@@ -32,7 +38,7 @@ var ap=`);
   html=html.replace(/if\(API\)\{api\('GET','\/descricoes'\)[\s\S]*?\}else\{loc\(\);render\(\);st\('','Salvo só neste computador'\)\}/,
 "if(API){api('GET','/descricoes').then(function(d){ONLINE=true;DS=d||{};render();st('ok','Banco conectado')},function(e){ONLINE=false;DS={};render();st('','Banco indisponível · não é possível salvar');console.error('Falha ao conectar banco',e)})}else{DS={};render();st('','Banco indisponível · não é possível salvar')}");
 
-  html=html.replace('</body>','<div id="madri-build" style="display:none">db-visible-20261016-0945</div></body>');
+  html=html.replace('</body>','<div id="madri-build" style="display:none">fixed-demand-visible-20261016</div></body>');
   document.open();document.write(html);document.close();
 }catch(e){document.getElementById('loading').textContent='Falha ao carregar: '+e.message;console.error(e)}})();
 </script></body></html>
